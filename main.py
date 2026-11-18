@@ -288,6 +288,21 @@ def fallback_hour(hour, p1):
     return {"hour": hour, "q": [round(value, 2) for value in quantiles], "donors": 0}
 
 
+def row_viewers(row):
+    """The viewers count of a read or a print row, whether it sits on the row or under `game`."""
+    if not isinstance(row, dict):
+        return None
+    value = row.get("viewers")
+    if isinstance(value, (int, float)):
+        return float(value)
+    game = row.get("game")
+    if isinstance(game, dict):
+        value = game.get("viewers")
+        if isinstance(value, (int, float)):
+            return float(value)
+    return None
+
+
 def hour_one_print(case):
     """Hour 1's print, from `known` in whichever shape the case ships it.
 
@@ -299,23 +314,24 @@ def hour_one_print(case):
     known = case.get("known")
     rows = known if isinstance(known, list) else [known] if isinstance(known, dict) else []
     for row in rows:
-        if isinstance(row, dict) and row.get("hour") == 1 and isinstance(row.get("viewers"), (int, float)):
-            return max(1.0, float(row["viewers"]))
+        if isinstance(row, dict) and row.get("hour") == 1 and row_viewers(row) is not None:
+            return max(1.0, row_viewers(row))
     reads, day_start = [], case.get("day_start")
     for row in rows:
-        if not isinstance(row, dict) or not isinstance(row.get("viewers"), (int, float)):
+        viewers = row_viewers(row)
+        if viewers is None:
             continue
         stamp = row.get("from") or row.get("at") or row.get("minute")
         if not stamp or not day_start:
-            reads.append(float(row["viewers"]))
+            reads.append(viewers)
             continue
         try:
             offset = (parse_ts(stamp) - parse_ts(day_start)).total_seconds() / 3600.0
         except (ValueError, TypeError):
-            reads.append(float(row["viewers"]))
+            reads.append(viewers)
             continue
         if 0.0 <= offset < 1.0:
-            reads.append(float(row["viewers"]))
+            reads.append(viewers)
     if reads:
         mean = sum(reads) / len(reads)
         return max(1.0, float(math.floor(mean + 0.5)))  # rounded half up, as the recorder's print is
